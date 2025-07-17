@@ -1,4 +1,4 @@
-FROM shentu-registry-registry-vpc.cn-shanghai.cr.aliyuncs.com/base/python:3.12
+FROM python:3.12
 
 WORKDIR /app
 
