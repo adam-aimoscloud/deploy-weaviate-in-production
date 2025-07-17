@@ -1,0 +1,6 @@
+temp_*
+__pycache__
+*.pyc
+app/weaviate
+kubectl
+helm

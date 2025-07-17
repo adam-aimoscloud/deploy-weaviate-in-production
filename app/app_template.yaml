@@ -1,0 +1,291 @@
+---
+# Source: weaviate/templates/weaviateSecretClusterAPI.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {app_name}-cluster-api-basic-auth
+  namespace: {namespace}
+type: kubernetes.io/basic-auth
+data:  
+  username: "c05QSW5rNDg5dlFJQ1p5Y2l6TGJDOGlEN1UwRW45ZEQ="
+  password: "a0FXS1RzbnpVUWlTUGVpUUpYdnNzZmZxTm1uSnByN0g="
+---
+# Source: weaviate/templates/weaviateConfigMap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {app_name}-config
+  namespace: {namespace}
+  labels:
+    app.kubernetes.io/name: {app_name}
+    app.kubernetes.io/managed-by: Helm
+data:
+  conf.yaml: |-
+    ---
+    authentication:
+      anonymous_access:
+        enabled: false
+      apikey:
+        allowed_keys:
+        - {api_key}
+        enabled: true
+        users:
+        - weaviate
+      oidc:
+        client_id: "wcs"
+        enabled: true
+        groups_claim: "groups"
+        issuer: "https://auth.wcs.api.weaviate.io/auth/realms/SeMI"
+        username_claim: "email"
+    authorization:
+      admin_list:
+        enabled: true
+        users:
+        - weaviate
+      rbac:
+        enabled: false
+    
+    query_defaults:
+      limit: 100
+    debug: false
+---
+# Source: weaviate/templates/weaviateHeadlessService.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {app_name}-headless
+  namespace: {namespace}
+  labels:
+    app.kubernetes.io/name: {app_name}
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    app: {app_name}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 7000
+  publishNotReadyAddresses: true
+---
+# Source: weaviate/templates/weaviateService.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {app_name}
+  namespace: {namespace}
+  labels:
+    app.kubernetes.io/name: {app_name}
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    service.beta.kubernetes.io/alibaba-cloud-loadbalancer-id: {lb_id}
+    service.beta.kubernetes.io/alibaba-cloud-loadbalancer-force-override-listeners: 'true'
+spec:
+  type: LoadBalancer
+  selector:
+    app: {app_name}
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+---
+# Source: weaviate/templates/weaviateServiceGRPC.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {app_name}-grpc
+  namespace: {namespace}
+  labels:
+    app.kubernetes.io/name: {app_name}
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    service.beta.kubernetes.io/alibaba-cloud-loadbalancer-id: {lb_id}
+    service.beta.kubernetes.io/alibaba-cloud-loadbalancer-force-override-listeners: 'true'
+spec:
+  type: LoadBalancer
+  selector:
+    app: {app_name}
+  ports:
+    - name: grpc
+      port: 50051
+      protocol: TCP
+      targetPort: 50051
+---
+# Source: weaviate/templates/weaviateStatefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {app_name}
+  namespace: {namespace}
+  labels:
+    name: {app_name}
+    app: {app_name}
+    app.kubernetes.io/name: {app_name}
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: {replicas}
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  serviceName: {app_name}-headless
+  selector:
+    matchLabels:
+      app: {app_name}
+  template:
+    metadata:
+      labels:
+        app: {app_name}
+        app.kubernetes.io/name: {app_name}
+        app.kubernetes.io/managed-by: Helm
+      annotations:
+        # To restart Pods if the ConfigMap is updated.
+        checksum/config: 4d895a2a1262038b8a529c6fb28d1eea02758c35c53b68d4e8349081f01a114e
+    spec:
+      securityContext:
+        {}
+      terminationGracePeriodSeconds: 600
+      
+      
+      initContainers:
+      - name: configure-sysctl
+        securityContext:
+          runAsUser: 0
+          privileged: true
+        image: {init_image}
+        imagePullPolicy: "IfNotPresent"
+        command: ["sysctl", "-w", "vm.max_map_count=524288", "vm.overcommit_memory=1"]
+      containers:
+      - name: weaviate
+        image: {image}
+        imagePullPolicy: IfNotPresent
+        command: 
+          - /bin/weaviate
+        args: 
+          - --host
+          - 0.0.0.0
+          - --port
+          - "8080"
+          - --scheme
+          - http
+          - --config-file
+          - /weaviate-config/conf.yaml
+          - --read-timeout=60s
+          - --write-timeout=60s
+        resources:
+          {}
+        env:
+          - name: CLUSTER_DATA_BIND_PORT
+            value: "7001"
+          - name: CLUSTER_GOSSIP_BIND_PORT
+            value: "7000"
+          - name: GOGC
+            value: "100"
+          - name: PROMETHEUS_MONITORING_ENABLED
+            value: "false"
+          - name: PROMETHEUS_MONITORING_GROUP
+            value: "false"
+          - name: QUERY_MAXIMUM_RESULTS
+            value: "100000"
+          - name: RAFT_BOOTSTRAP_TIMEOUT
+            value: "600"
+          - name: REINDEX_VECTOR_DIMENSIONS_AT_STARTUP
+            value: "false"
+          - name: TRACK_VECTOR_DIMENSIONS
+            value: "false"
+          - name: RUNTIME_OVERRIDES_ENABLED
+            value: "false"
+          - name: RUNTIME_OVERRIDES_PATH
+            value: "/config/overrides.yaml"
+          - name: RUNTIME_OVERRIDES_LOAD_INTERVAL
+            value: "2m"
+          - name: CLUSTER_BASIC_AUTH_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {app_name}-cluster-api-basic-auth
+                key: username
+          - name: CLUSTER_BASIC_AUTH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {app_name}-cluster-api-basic-auth
+                key: password
+          - name: PERSISTENCE_DATA_PATH
+            value: '/var/lib/weaviate'
+          - name: DEFAULT_VECTORIZER_MODULE
+            value: none
+          - name: RAFT_JOIN
+            value: "weaviate-0"
+          - name: RAFT_BOOTSTRAP_EXPECT
+            value: "1"
+          - name: CLUSTER_JOIN
+            value: {app_name}-headless.{namespace}.svc.cluster.local.
+        resources:
+          requests:
+            cpu: {request_cpu}
+            memory: {request_memory}
+          limits:
+            cpu: {limit_cpu}
+            memory: {limit_memory}
+        ports:
+          - containerPort: 8080
+          - name: grpc
+            containerPort: 50051
+            protocol: TCP
+        volumeMounts:
+          - name: {app_name}-config
+            mountPath: /weaviate-config
+          - name: {pvc_name}
+            mountPath: /var/lib/weaviate
+          
+        livenessProbe:
+          httpGet:
+            path: /v1/.well-known/live
+            port: 8080
+          initialDelaySeconds: 900
+          periodSeconds: 10
+          failureThreshold: 30
+          successThreshold: 1
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /v1/.well-known/ready
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 10
+          failureThreshold: 3
+          successThreshold: 1
+          timeoutSeconds: 3
+        securityContext:
+          {}
+      volumes:
+        - name: {app_name}-config
+          configMap:
+            name: {app_name}-config
+        
+      affinity: 
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {app_name}
+              topologyKey: kubernetes.io/hostname
+            weight: 1
+
+  volumeClaimTemplates:
+  - metadata:
+      name: {pvc_name}
+      namespace: {namespace}
+      labels:
+        app.kubernetes.io/name: {app_name}
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      accessModes: [ "ReadWriteMany" ]
+      storageClassName: alibabacloud-cnfs-nas
+      resources:
+        requests:
+          storage: {storage}

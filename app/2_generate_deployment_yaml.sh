@@ -1,0 +1,1 @@
+helm template my-release ./weaviate -f values.yaml --namespace dify > deployment.yaml

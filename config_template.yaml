@@ -1,0 +1,47 @@
+namespace: default
+pv:     # weaviate database persistent storage, NAS for instance
+  - name: weaviate-pv-0
+    server: 123456.cn-shanghai.nas.aliyuncs.com
+    path: /weaviate-0
+    storage: 50Gi
+  - name: weaviate-pv-1
+    server: 123456.cn-shanghai.nas.aliyuncs.com
+    path: /weaviate-1
+    storage: 50Gi
+app:        # weaviate database main program
+  name: weaviate
+  pvc_name: weaviate-pvc
+  replicas: 2   # equal to pv count
+  storage: 50Gi # equal to pv size
+  image: semitechnologies/weaviate:1.30.0  # In china, use "docker.1ms.run/semitechnologies/weaviate:1.30.0" instead
+  init_image: alpine:latest # In china, use "docker.1ms.run/library/alpine:latest" instead
+  request_cpu: 1000m   
+  request_memory: 1000Mi
+  limit_cpu: 2000m
+  limit_memory: 2000Mi
+  lb_id: lb-123456      # LoadBalancer id
+  api_key: weaviate123456
+
+backup:
+  name: weaviate-backup
+  image: weaviate-backup:1.1  # build from backup/Dockerfile
+  oss:      # use object storage system to save backup data
+    endpoint: oss-cn-shanghai.aliyuncs.com
+    access_key_id: 123456
+    access_key_secret: 123456
+    bucket: weaviate-backup
+    prefix: weaviate-backup/
+  cron: "0 0 * * *" # backup time point: Minute, Hour, Day, Month, Day_Of_Week
+  src_dirs:
+    - dir: /data0
+      pv: backup-pv-0
+      storage: 50Gi
+      subpath: /weaviate-0
+      server: 123456.cn-shanghai.nas.aliyuncs.com
+    - dir: /data1
+      pv: backup-pv-1
+      storage: 50Gi
+      subpath: /weaviate-1
+      server: 123456.cn-shanghai.nas.aliyuncs.com
+  cache_dir: .  # save tempory file for backup program
+

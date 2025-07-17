@@ -1,0 +1,37 @@
+apiVersion: storage.alibabacloud.com/v1beta1
+kind: ContainerNetworkFileSystem
+metadata:
+  name: cnfs-{pv_name}
+spec:
+  description: "cnfs"
+  type: nas
+  reclaimPolicy: Retain
+  parameters:
+    server: {server}
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {pv_name}
+  labels:
+    alicloud-pvname: {pv_name}
+spec:
+  storageClassName: alibabacloud-cnfs-nas
+  capacity:
+    storage: {storage}
+  accessModes:
+    - ReadWriteMany
+  csi:
+    driver: nasplugin.csi.alibabacloud.com
+    volumeHandle: {pv_name} # 需要与PV的name保持一致。
+    volumeAttributes:
+      containerNetworkFileSystem: cnfs-{pv_name}
+      path: "{path}"
+  mountOptions:
+    - nolock,tcp,noresvport
+    - vers=3
+  claimRef:
+    name: {pvc_name}-{app_name}-{index}
+    namespace: {namespace}
+

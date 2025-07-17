@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {pv_name}
+  namespace: {namespace}
+spec:
+  storageClassName: alibabacloud-cnfs-nas
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: {storage}
+  volumeName: {pv_name}
