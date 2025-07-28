@@ -176,6 +176,10 @@ spec:
         resources:
           {}
         env:
+          - name: ENABLE_MODULES
+            value: "text2vec-cohere,text2vec-huggingface,text2vec-openai"
+          - name: DEFAULT_VECTORIZER_MODULE
+            value: "text2vec-openai"
           - name: CLUSTER_DATA_BIND_PORT
             value: "7001"
           - name: CLUSTER_GOSSIP_BIND_PORT
